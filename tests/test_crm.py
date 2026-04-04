@@ -2,6 +2,7 @@
 Tests for the CRM contacts feature:
 - POST /api/contacts          (create)
 - PATCH /api/contacts/{email} (update name/phone)
+- DELETE /api/contacts/{email} (delete contact)
 - GET /api/contacts
 - GET /api/contacts/{email}
 - PUT /api/contacts/{email}/stage
@@ -229,6 +230,32 @@ class TestDeleteNote:
     def test_delete_nonexistent_note_returns_404(self, client, db):
         make_contact(db, email="mia@example.com")
         r = client.delete("/api/contacts/mia%40example.com/notes/99999")
+        assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/contacts/{email} — delete contact
+# ---------------------------------------------------------------------------
+
+class TestDeleteContact:
+    def test_delete_contact(self, client, db):
+        make_contact(db, email="del@example.com")
+        r = client.delete("/api/contacts/del%40example.com")
+        assert r.status_code == 200
+        assert r.json()["deleted"] == "del@example.com"
+        # Verify gone
+        r2 = client.get("/api/contacts/del%40example.com")
+        assert r2.status_code == 404
+
+    def test_delete_also_removes_notes(self, client, db):
+        make_contact(db, email="dnotes@example.com")
+        note = ContactNote(contact_email="dnotes@example.com", body="Nota")
+        db.add(note); db.commit(); db.refresh(note)
+        client.delete("/api/contacts/dnotes%40example.com")
+        assert db.query(ContactNote).filter(ContactNote.contact_email == "dnotes@example.com").count() == 0
+
+    def test_delete_nonexistent_returns_404(self, client):
+        r = client.delete("/api/contacts/noexiste%40example.com")
         assert r.status_code == 404
 
 

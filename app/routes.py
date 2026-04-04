@@ -668,6 +668,18 @@ def delete_contact_note(contact_email: str, note_id: int, db: Session = Depends(
     return {"deleted": note_id}
 
 
+@router.delete("/api/contacts/{contact_email:path}")
+def delete_contact(contact_email: str, db: Session = Depends(get_db)):
+    """Delete a contact and all their notes."""
+    contact = db.query(Contact).filter(Contact.email == contact_email).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    db.query(ContactNote).filter(ContactNote.contact_email == contact_email).delete()
+    db.delete(contact)
+    db.commit()
+    return {"deleted": contact_email}
+
+
 @router.get("/api/settings")
 def get_settings(db: Session = Depends(get_db)):
     """Return public app settings (sync interval, business name, active account)."""
