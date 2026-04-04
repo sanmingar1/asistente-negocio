@@ -71,6 +71,7 @@ class Email(Base):
     lead_phone = Column(String(50), nullable=True)    # Extracted phone number
     lead_property_ref = Column(String(100), nullable=True)  # Extracted property ref
     is_demo = Column(Boolean, default=False, nullable=False)
+    account_email = Column(String(255), nullable=True, index=True)  # Gmail account that owns this email
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -99,6 +100,7 @@ class Email(Base):
             "lead_property_ref": self.lead_property_ref,
             "is_demo": self.is_demo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "account_email": self.account_email,
             "needs_followup": (
                 self.priority in ("urgente", "alta")
                 and not self.is_replied

@@ -123,11 +123,31 @@ def sync_emails(db: Session = Depends(get_db)):
     Fetch new emails from Gmail, classify them with AI, and persist to DB.
     Returns the number of newly added emails.
     """
-    # Collect existing gmail IDs to avoid duplicates
-    existing_ids = {row[0] for row in db.query(Email.gmail_id).all()}
-
     gmail = get_gmail_client()
     classifier = get_ai_classifier()
+
+    # Detect the active Gmail account and purge data from any previous account
+    try:
+        active_account = gmail.get_account_email()
+    except Exception as exc:
+        logger.error("Could not determine Gmail account: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Gmail auth failed: {exc}")
+
+    foreign = (
+        db.query(Email)
+        .filter(Email.account_email.isnot(None), Email.account_email != active_account)
+        .first()
+    )
+    if foreign:
+        logger.warning(
+            "Account changed from %s to %s — purging all previous data.",
+            foreign.account_email, active_account,
+        )
+        db.query(Email).filter(Email.account_email != active_account).delete()
+        db.commit()
+
+    # Collect existing gmail IDs for this account to avoid duplicates
+    existing_ids = {row[0] for row in db.query(Email.gmail_id).all()}
 
     try:
         raw_emails = gmail.fetch_emails(existing_ids=existing_ids)
@@ -171,6 +191,7 @@ def sync_emails(db: Session = Depends(get_db)):
                 is_read=False,
                 is_replied=False,
                 raw_labels=email_data["raw_labels"],
+                account_email=active_account,
             )
             db.add(db_email)
             db.commit()
@@ -589,11 +610,19 @@ def delete_contact_note(contact_email: str, note_id: int, db: Session = Depends(
 
 
 @router.get("/api/settings")
-def get_settings():
-    """Return public app settings (sync interval, business name)."""
+def get_settings(db: Session = Depends(get_db)):
+    """Return public app settings (sync interval, business name, active account)."""
     config = _load_config()
+    # Derive active account from the most recently synced email
+    row = (
+        db.query(Email.account_email)
+        .filter(Email.account_email.isnot(None), Email.is_demo == False)  # noqa: E712
+        .order_by(Email.created_at.desc())
+        .first()
+    )
     return {
         "sync_interval_minutes": config.get("email_provider", {}).get("sync_interval_minutes", 5),
         "business_name": config.get("business", {}).get("name", ""),
         "demo_mode": config.get("demo", {}).get("enabled", False),
+        "active_account": row[0] if row else None,
     }

@@ -156,6 +156,12 @@ class GmailClient:
     # Public API
     # ------------------------------------------------------------------
 
+    def get_account_email(self) -> str:
+        """Return the email address of the authenticated Gmail account."""
+        service = self.get_service()
+        profile = service.users().getProfile(userId="me").execute()
+        return profile["emailAddress"]
+
     def fetch_emails(
         self,
         max_results: Optional[int] = None,
