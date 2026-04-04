@@ -54,6 +54,7 @@
         <div>
           <p class="text-sm font-semibold leading-tight text-white" id="sidebar-title">Bandeja Inteligente</p>
           <p class="text-xs text-slate-400 leading-tight" id="business-name">Inmobiliaria</p>
+          <p class="text-xs text-slate-500 leading-tight truncate hidden" id="active-account"></p>
         </div>
         <span id="demo-badge" class="hidden ml-auto text-xs font-bold bg-amber-400 text-amber-900 px-2 py-0.5 rounded-full">DEMO</span>
       </div>
@@ -1257,6 +1258,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (settings.demo_mode) {
       document.getElementById('demo-badge').classList.remove('hidden');
+    }
+    if (settings.active_account) {
+      document.getElementById('active-account').textContent = settings.active_account;
+      document.getElementById('active-account').classList.remove('hidden');
     }
     startAutoSync(settings.sync_interval_minutes || 5);
   } catch (e) {
