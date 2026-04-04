@@ -94,6 +94,7 @@ def mock_gmail():
     m = MagicMock()
     m.fetch_emails.return_value = []
     m.send_reply.return_value = "sent_msg_id"
+    m.get_account_email.return_value = "test@gmail.com"
     return m
 
 
