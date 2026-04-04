@@ -244,6 +244,7 @@ def _emails():
 
 def load_demo_data() -> None:
     """Insert demo emails if they don't already exist."""
+    from app.models import Contact
     db = SessionLocal()
     try:
         inserted = 0
@@ -256,6 +257,17 @@ def load_demo_data() -> None:
             try:
                 db.commit()
                 inserted += 1
+                # Upsert contact so CRM is populated in demo mode
+                if email.sender_email:
+                    contact = db.query(Contact).filter(Contact.email == email.sender_email).first()
+                    if contact is None:
+                        db.add(Contact(
+                            email=email.sender_email,
+                            name=email.lead_name or email.sender,
+                            phone=email.lead_phone,
+                            lead_source=email.lead_source,
+                        ))
+                        db.commit()
             except IntegrityError:
                 db.rollback()
         if inserted:
