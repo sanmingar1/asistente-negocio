@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
@@ -133,17 +133,31 @@ def sync_emails(db: Session = Depends(get_db)):
         logger.error("Could not determine Gmail account: %s", exc)
         raise HTTPException(status_code=502, detail=f"Gmail auth failed: {exc}")
 
+    # Detect an explicit account switch (only when a known different account exists)
     foreign = (
         db.query(Email)
-        .filter(Email.account_email.isnot(None), Email.account_email != active_account)
+        .filter(
+            Email.is_demo == False,  # noqa: E712
+            Email.account_email.isnot(None),
+            Email.account_email != active_account,
+        )
         .first()
     )
     if foreign:
-        logger.warning(
-            "Account changed from %s to %s — purging all previous data.",
-            foreign.account_email, active_account,
+        # Purge ALL non-demo emails that don't belong to the active account,
+        # including legacy rows with account_email=NULL (pre-isolation emails).
+        deleted_count = (
+            db.query(Email)
+            .filter(
+                Email.is_demo == False,  # noqa: E712
+                or_(Email.account_email.is_(None), Email.account_email != active_account),
+            )
+            .delete(synchronize_session=False)
         )
-        db.query(Email).filter(Email.account_email != active_account).delete()
+        logger.warning(
+            "Account changed to %s — purged %d emails from previous account.",
+            active_account, deleted_count,
+        )
         db.commit()
 
     # Collect existing gmail IDs for this account to avoid duplicates
