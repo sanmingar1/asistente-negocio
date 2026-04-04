@@ -250,26 +250,31 @@ def load_demo_data() -> None:
         inserted = 0
         for data in _emails():
             exists = db.query(Email).filter(Email.gmail_id == data["gmail_id"]).first()
-            if exists:
-                continue
-            email = Email(**data, thread_id=None, raw_labels=None, is_demo=True)
-            db.add(email)
-            try:
-                db.commit()
-                inserted += 1
-                # Upsert contact so CRM is populated in demo mode
-                if email.sender_email:
-                    contact = db.query(Contact).filter(Contact.email == email.sender_email).first()
-                    if contact is None:
-                        db.add(Contact(
-                            email=email.sender_email,
-                            name=email.lead_name or email.sender,
-                            phone=email.lead_phone,
-                            lead_source=email.lead_source,
-                        ))
+            email = exists
+            if not exists:
+                email = Email(**data, thread_id=None, raw_labels=None, is_demo=True)
+                db.add(email)
+                try:
+                    db.commit()
+                    inserted += 1
+                except IntegrityError:
+                    db.rollback()
+                    continue
+
+            # Upsert contact (both for new and already-existing demo emails)
+            if email.sender_email:
+                contact = db.query(Contact).filter(Contact.email == email.sender_email).first()
+                if contact is None:
+                    db.add(Contact(
+                        email=email.sender_email,
+                        name=email.lead_name or email.sender,
+                        phone=email.lead_phone,
+                        lead_source=email.lead_source,
+                    ))
+                    try:
                         db.commit()
-            except IntegrityError:
-                db.rollback()
+                    except IntegrityError:
+                        db.rollback()
         if inserted:
             logger.info("Demo mode: inserted %d sample emails.", inserted)
         else:
