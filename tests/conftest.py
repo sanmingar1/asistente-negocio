@@ -5,7 +5,7 @@ External APIs (Gmail, Calendar, NVIDIA NIM) are always mocked.
 """
 import uuid
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -17,6 +17,7 @@ from app.database import Base, get_db
 from app.routes import router
 from app.models import Email
 import app.routes as routes_module
+from app import account_manager
 
 # ---------------------------------------------------------------------------
 # Minimal test app — no lifespan, no static files, no demo data loading
@@ -96,6 +97,19 @@ def mock_gmail():
     m.send_reply.return_value = "sent_msg_id"
     m.get_account_email.return_value = "test@gmail.com"
     return m
+
+
+@pytest.fixture()
+def mock_accounts(mock_gmail):
+    """
+    Patch account_manager.list_accounts to return one test account and
+    patch GmailClient constructor to return mock_gmail.
+    Use this fixture in any test that calls POST /api/sync.
+    """
+    with patch.object(account_manager, "list_accounts", return_value=["test@gmail.com"]), \
+         patch.object(account_manager, "get_token_path", return_value="token.json"), \
+         patch("app.routes.GmailClient", return_value=mock_gmail):
+        yield mock_gmail
 
 
 # ---------------------------------------------------------------------------

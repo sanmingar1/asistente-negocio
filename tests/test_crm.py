@@ -329,8 +329,8 @@ class TestUpdateContact:
 # ---------------------------------------------------------------------------
 
 class TestContactUpsert:
-    def test_sync_creates_contact(self, client, db, mock_classifier, mock_gmail):
-        mock_gmail.fetch_emails.return_value = [{
+    def test_sync_creates_contact(self, client, db, mock_classifier, mock_accounts):
+        mock_accounts.fetch_emails.return_value = [{
             "gmail_id": str(uuid.uuid4()),
             "thread_id": "thread1",
             "sender": "Nina López",
@@ -342,8 +342,7 @@ class TestContactUpsert:
             "raw_labels": "[]",
         }]
 
-        with patch.object(routes_module, "_gmail_client", mock_gmail), \
-             patch.object(routes_module, "_ai_classifier", mock_classifier):
+        with patch.object(routes_module, "_ai_classifier", mock_classifier):
             r = client.post("/api/sync")
 
         assert r.status_code == 200
@@ -352,7 +351,7 @@ class TestContactUpsert:
         assert contact.name == "Nina López"
         assert contact.pipeline_stage == "lead"
 
-    def test_sync_updates_existing_contact_with_new_data(self, client, db, mock_classifier, mock_gmail):
+    def test_sync_updates_existing_contact_with_new_data(self, client, db, mock_classifier, mock_accounts):
         # Contact exists but without phone
         c = Contact(email="oscar@example.com", name="Oscar", phone=None)
         db.add(c)
@@ -365,7 +364,7 @@ class TestContactUpsert:
             "summary": "Quiere visitar.",
             "lead_score": 7,
         }
-        mock_gmail.fetch_emails.return_value = [{
+        mock_accounts.fetch_emails.return_value = [{
             "gmail_id": str(uuid.uuid4()),
             "thread_id": "t2",
             "sender": "Oscar",
@@ -379,7 +378,6 @@ class TestContactUpsert:
 
         with patch("app.portal_parser.detect_source", return_value="Idealista"), \
              patch("app.portal_parser.extract_lead_data", return_value={"phone": "600123456"}), \
-             patch.object(routes_module, "_gmail_client", mock_gmail), \
              patch.object(routes_module, "_ai_classifier", mock_classifier):
             client.post("/api/sync")
 
@@ -387,13 +385,13 @@ class TestContactUpsert:
         assert c.phone == "600123456"
         assert c.lead_source == "Idealista"
 
-    def test_sync_does_not_overwrite_existing_contact_data(self, client, db, mock_classifier, mock_gmail):
+    def test_sync_does_not_overwrite_existing_contact_data(self, client, db, mock_classifier, mock_accounts):
         # Contact already has a phone — sync should NOT overwrite it
         c = Contact(email="paula@example.com", name="Paula", phone="611222333")
         db.add(c)
         db.commit()
 
-        mock_gmail.fetch_emails.return_value = [{
+        mock_accounts.fetch_emails.return_value = [{
             "gmail_id": str(uuid.uuid4()),
             "thread_id": "t3",
             "sender": "Paula",
@@ -407,7 +405,6 @@ class TestContactUpsert:
 
         with patch("app.portal_parser.detect_source", return_value="Idealista"), \
              patch("app.portal_parser.extract_lead_data", return_value={"phone": "999999999"}), \
-             patch.object(routes_module, "_gmail_client", mock_gmail), \
              patch.object(routes_module, "_ai_classifier", mock_classifier):
             client.post("/api/sync")
 

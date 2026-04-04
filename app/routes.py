@@ -1,4 +1,5 @@
 import logging
+import os
 import datetime as dt
 from typing import Optional
 
@@ -15,6 +16,7 @@ from app.ai_classifier import AIClassifier
 from app import notifier
 from app import portal_parser
 from app.calendar_client import CalendarClient
+from app import account_manager
 
 import yaml
 
@@ -82,6 +84,7 @@ def list_emails(
     archived: bool = False,
     needs_followup: bool = False,
     snoozed: bool = False,
+    account: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Return emails newest first.
@@ -116,6 +119,8 @@ def list_emails(
         query = query.filter(Email.priority == priority)
     if source:
         query = query.filter(Email.lead_source == source)
+    if account:
+        query = query.filter(Email.account_email == account)
 
     emails = query.all()
     return [e.to_dict() for e in emails]
@@ -178,42 +183,7 @@ def sync_emails(db: Session = Depends(get_db)):
     Fetch new emails from Gmail, classify them with AI, and persist to DB.
     Returns the number of newly added emails.
     """
-    gmail = get_gmail_client()
     classifier = get_ai_classifier()
-
-    # Detect the active Gmail account and purge data from any previous account
-    try:
-        active_account = gmail.get_account_email()
-    except Exception as exc:
-        logger.error("Could not determine Gmail account: %s", exc)
-        raise HTTPException(status_code=502, detail=f"Gmail auth failed: {exc}")
-
-    # Detect an explicit account switch (only when a known different account exists)
-    foreign = (
-        db.query(Email)
-        .filter(
-            Email.is_demo == False,  # noqa: E712
-            Email.account_email.isnot(None),
-            Email.account_email != active_account,
-        )
-        .first()
-    )
-    if foreign:
-        # Purge ALL non-demo emails that don't belong to the active account,
-        # including legacy rows with account_email=NULL (pre-isolation emails).
-        deleted_count = (
-            db.query(Email)
-            .filter(
-                Email.is_demo == False,  # noqa: E712
-                or_(Email.account_email.is_(None), Email.account_email != active_account),
-            )
-            .delete(synchronize_session=False)
-        )
-        logger.warning(
-            "Account changed to %s — purged %d emails from previous account.",
-            active_account, deleted_count,
-        )
-        db.commit()
 
     # Wake up any emails whose snooze period has expired
     now = dt.datetime.utcnow()
@@ -228,69 +198,89 @@ def sync_emails(db: Session = Depends(get_db)):
         db.commit()
         logger.info("Woke up %d snoozed email(s).", len(woken))
 
-    # Collect existing gmail IDs for this account to avoid duplicates
+    # Collect existing gmail IDs to avoid duplicates across all accounts
     existing_ids = {row[0] for row in db.query(Email.gmail_id).all()}
 
-    try:
-        raw_emails = gmail.fetch_emails(existing_ids=existing_ids)
-    except Exception as exc:
-        logger.error("Gmail fetch failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"Gmail fetch failed: {exc}")
-
     new_count = 0
+    total_fetched = 0
     errors = []
 
-    for email_data in raw_emails:
+    # Sync each connected account; fall back to legacy single-account mode
+    connected = account_manager.list_accounts()
+    if not connected:
+        raise HTTPException(status_code=503, detail="No Gmail accounts connected. Add an account first.")
+
+    for acct in connected:
+        token_file = account_manager.get_token_path(acct)
         try:
-            classification = classifier.classify_email(
-                subject=email_data["subject"],
-                body=email_data.get("body_full", email_data["body_preview"]),
-                sender=f"{email_data['sender']} <{email_data['sender_email']}>",
-            )
-
-            source = portal_parser.detect_source(email_data["sender_email"])
-            portal_data = portal_parser.extract_lead_data(
-                email_data.get("body_full", email_data["body_preview"])
-            ) if source else {}
-
-            db_email = Email(
-                gmail_id=email_data["gmail_id"],
-                thread_id=email_data.get("thread_id"),
-                sender=email_data["sender"],
-                sender_email=email_data["sender_email"],
-                subject=email_data["subject"],
-                body_preview=email_data["body_preview"],
-                received_at=email_data["received_at"],
-                category=classification["category"],
-                priority=classification["priority"],
-                color=classification["color"],
-                summary=classification["summary"],
-                lead_score=classification.get("lead_score"),
-                lead_source=source,
-                lead_name=portal_data.get("name"),
-                lead_phone=portal_data.get("phone"),
-                lead_property_ref=portal_data.get("property_ref"),
-                is_read=False,
-                is_replied=False,
-                raw_labels=email_data["raw_labels"],
-                account_email=active_account,
-            )
-            db.add(db_email)
-            db.commit()
-            _upsert_contact(db, db_email)
-            new_count += 1
-            notifier.notify(email_data, classification)
-        except IntegrityError:
-            db.rollback()
-            logger.debug("Skipping duplicate email %s", email_data.get("gmail_id"))
+            gmail = GmailClient(token_file=token_file)
+            active_account = gmail.get_account_email()
         except Exception as exc:
-            db.rollback()
-            logger.error("Failed to process email %s: %s", email_data.get("gmail_id"), exc)
-            errors.append(str(exc))
+            logger.error("Auth failed for account %s: %s", acct, exc)
+            errors.append(f"{acct}: auth error — {exc}")
+            continue
 
-    response = {"new_emails": new_count, "total_fetched": len(raw_emails)}
+        try:
+            raw_emails = gmail.fetch_emails(existing_ids=existing_ids)
+        except Exception as exc:
+            logger.error("Gmail fetch failed for %s: %s", active_account, exc)
+            errors.append(f"{active_account}: fetch error — {exc}")
+            continue
+
+        total_fetched += len(raw_emails)
+
+        for email_data in raw_emails:
+            try:
+                classification = classifier.classify_email(
+                    subject=email_data["subject"],
+                    body=email_data.get("body_full", email_data["body_preview"]),
+                    sender=f"{email_data['sender']} <{email_data['sender_email']}>",
+                )
+
+                source = portal_parser.detect_source(email_data["sender_email"])
+                portal_data = portal_parser.extract_lead_data(
+                    email_data.get("body_full", email_data["body_preview"])
+                ) if source else {}
+
+                db_email = Email(
+                    gmail_id=email_data["gmail_id"],
+                    thread_id=email_data.get("thread_id"),
+                    sender=email_data["sender"],
+                    sender_email=email_data["sender_email"],
+                    subject=email_data["subject"],
+                    body_preview=email_data["body_preview"],
+                    received_at=email_data["received_at"],
+                    category=classification["category"],
+                    priority=classification["priority"],
+                    color=classification["color"],
+                    summary=classification["summary"],
+                    lead_score=classification.get("lead_score"),
+                    lead_source=source,
+                    lead_name=portal_data.get("name"),
+                    lead_phone=portal_data.get("phone"),
+                    lead_property_ref=portal_data.get("property_ref"),
+                    is_read=False,
+                    is_replied=False,
+                    raw_labels=email_data["raw_labels"],
+                    account_email=active_account,
+                )
+                db.add(db_email)
+                db.commit()
+                existing_ids.add(email_data["gmail_id"])
+                _upsert_contact(db, db_email)
+                new_count += 1
+                notifier.notify(email_data, classification)
+            except IntegrityError:
+                db.rollback()
+                logger.debug("Skipping duplicate email %s", email_data.get("gmail_id"))
+            except Exception as exc:
+                db.rollback()
+                logger.error("Failed to process email %s: %s", email_data.get("gmail_id"), exc)
+                errors.append(str(exc))
+
+    response = {"new_emails": new_count, "total_fetched": total_fetched}
     if errors:
-        response["errors"] = errors[:5]  # Cap error list size
+        response["errors"] = errors[:5]
     return response
 
 
@@ -653,6 +643,77 @@ def unsnooze_email(email_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# Multi-account management
+# ---------------------------------------------------------------------------
+
+@router.get("/api/accounts")
+def list_accounts_endpoint():
+    """Return the list of connected Gmail accounts."""
+    accounts = account_manager.list_accounts()
+    # Resolve __legacy__ to a real email if possible
+    result = []
+    for acct in accounts:
+        token_file = account_manager.get_token_path(acct)
+        try:
+            gmail = GmailClient(token_file=token_file)
+            email = gmail.get_account_email()
+            result.append({"email": email, "status": "connected"})
+        except Exception:
+            label = acct if acct != "__legacy__" else "cuenta principal"
+            result.append({"email": label, "status": "error"})
+    return result
+
+
+@router.post("/api/accounts/add")
+def add_account_endpoint():
+    """
+    Trigger Google OAuth flow to connect a new Gmail account.
+    Opens a browser window on the server machine (local-only app).
+    Blocks until the user completes the OAuth flow.
+    """
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from app.gmail_client import SCOPES, CREDENTIALS_FILE
+
+    if not os.path.exists(CREDENTIALS_FILE):
+        raise HTTPException(status_code=503, detail="credentials.json not found. Set up Google OAuth credentials first.")
+
+    try:
+        flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+        creds = flow.run_local_server(port=0)
+    except Exception as exc:
+        logger.error("OAuth flow failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"OAuth flow failed: {exc}")
+
+    # Get the email of the newly authenticated account
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    service = build("gmail", "v1", credentials=creds)
+    email = service.users().getProfile(userId="me").execute()["emailAddress"]
+
+    account_manager.add_account(email, creds.to_json())
+    logger.info("New account connected: %s", email)
+    return {"email": email, "status": "connected"}
+
+
+@router.delete("/api/accounts/{account_email:path}")
+def remove_account_endpoint(account_email: str, db: Session = Depends(get_db)):
+    """Disconnect a Gmail account and delete its emails from the DB."""
+    removed = account_manager.remove_account(account_email)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    # Delete all non-demo emails from this account
+    deleted = (
+        db.query(Email)
+        .filter(Email.account_email == account_email, Email.is_demo == False)  # noqa: E712
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    logger.info("Disconnected %s — deleted %d emails.", account_email, deleted)
+    return {"removed": account_email, "emails_deleted": deleted}
+
+
+# ---------------------------------------------------------------------------
 # CRM — Contacts
 # ---------------------------------------------------------------------------
 
@@ -798,18 +859,22 @@ def delete_contact(contact_email: str, db: Session = Depends(get_db)):
 
 @router.get("/api/settings")
 def get_settings(db: Session = Depends(get_db)):
-    """Return public app settings (sync interval, business name, active account)."""
+    """Return public app settings (sync interval, business name, connected accounts)."""
     config = _load_config()
-    # Derive active account from the most recently synced email
-    row = (
-        db.query(Email.account_email)
-        .filter(Email.account_email.isnot(None), Email.is_demo == False)  # noqa: E712
-        .order_by(Email.created_at.desc())
-        .first()
-    )
+    connected = account_manager.list_accounts()
+    # Resolve __legacy__ to actual email if present
+    accounts = []
+    for acct in connected:
+        token_file = account_manager.get_token_path(acct)
+        try:
+            email = GmailClient(token_file=token_file).get_account_email()
+            accounts.append(email)
+        except Exception:
+            if acct != "__legacy__":
+                accounts.append(acct)
     return {
         "sync_interval_minutes": config.get("email_provider", {}).get("sync_interval_minutes", 5),
         "business_name": config.get("business", {}).get("name", ""),
         "demo_mode": config.get("demo", {}).get("enabled", False),
-        "active_account": row[0] if row else None,
+        "connected_accounts": accounts,
     }

@@ -54,7 +54,7 @@
         <div class="min-w-0 flex-1">
           <p class="text-sm font-semibold leading-tight text-white truncate" id="sidebar-title">Bandeja Inteligente</p>
           <p class="text-xs text-slate-400 leading-tight truncate" id="business-name">Inmobiliaria</p>
-          <p class="text-xs text-slate-500 leading-tight truncate hidden" id="active-account"></p>
+          <div id="active-account" class="hidden"></div>
         </div>
         <span id="demo-badge" class="hidden ml-auto text-xs font-bold bg-amber-400 text-amber-900 px-2 py-0.5 rounded-full">DEMO</span>
       </div>
@@ -177,6 +177,21 @@
       </div>
 
     </div><!-- end scrollable -->
+
+    <!-- Accounts section -->
+    <div class="px-3 pb-2 border-t border-slate-700/60 pt-2">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1" id="label-accounts-section">Cuentas</p>
+      <div id="account-list-sidebar" class="space-y-0.5 mb-1">
+        <!-- Filled dynamically -->
+      </div>
+      <button onclick="addAccount()" id="btn-add-account"
+        class="w-full flex items-center gap-2 text-xs text-slate-400 hover:text-white hover:bg-slate-800 px-2 py-1.5 rounded-lg transition-colors">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span id="label-add-account">Añadir cuenta</span>
+      </button>
+    </div>
 
     <!-- CRM Button -->
     <div class="px-3 pb-2">
@@ -1029,6 +1044,15 @@ const TRANSLATIONS = {
     'toast.bulk_archive_ok': (n) => `${n} correo${n !== 1 ? 's' : ''} archivado${n !== 1 ? 's' : ''}`,
     'toast.bulk_read_ok': (n) => `${n} correo${n !== 1 ? 's' : ''} marcado${n !== 1 ? 's' : ''} como leído`,
     'toast.bulk_error': (msg) => `Error en acción en bloque: ${msg}`,
+    'accounts.section': 'Cuentas',
+    'accounts.add': 'Añadir cuenta',
+    'accounts.adding': 'Abriendo ventana OAuth…',
+    'accounts.filter_all': 'Todas las cuentas',
+    'toast.account_added': (email) => `Cuenta ${email} conectada`,
+    'toast.account_add_error': (msg) => `Error al conectar cuenta: ${msg}`,
+    'toast.account_removed': (email) => `Cuenta ${email} desconectada`,
+    'toast.account_remove_error': (msg) => `Error al desconectar: ${msg}`,
+    'accounts.confirm_remove': (email) => `¿Desconectar la cuenta "${email}"? Se eliminarán todos sus correos.`,
   },
   en: {
     'sidebar.title': 'Smart Inbox',
@@ -1199,6 +1223,15 @@ const TRANSLATIONS = {
     'toast.bulk_archive_ok': (n) => `${n} email${n !== 1 ? 's' : ''} archived`,
     'toast.bulk_read_ok': (n) => `${n} email${n !== 1 ? 's' : ''} marked as read`,
     'toast.bulk_error': (msg) => `Bulk action error: ${msg}`,
+    'accounts.section': 'Accounts',
+    'accounts.add': 'Add account',
+    'accounts.adding': 'Opening OAuth window…',
+    'accounts.filter_all': 'All accounts',
+    'toast.account_added': (email) => `Account ${email} connected`,
+    'toast.account_add_error': (msg) => `Error connecting account: ${msg}`,
+    'toast.account_removed': (email) => `Account ${email} disconnected`,
+    'toast.account_remove_error': (msg) => `Error disconnecting: ${msg}`,
+    'accounts.confirm_remove': (email) => `Disconnect account "${email}"? All its emails will be deleted.`,
   },
 };
 
@@ -1281,6 +1314,14 @@ function applyLang(save = false) {
   if (snoozeOptWeek) snoozeOptWeek.textContent = t('snooze.opt_week');
   const snoozeCustomLabel = document.getElementById('snooze-custom-label');
   if (snoozeCustomLabel) snoozeCustomLabel.textContent = t('snooze.custom_label');
+
+  // Accounts section
+  const accountsSection = document.getElementById('label-accounts-section');
+  if (accountsSection) accountsSection.textContent = t('accounts.section');
+  const addAccountLabel = document.getElementById('label-add-account');
+  if (addAccountLabel) addAccountLabel.textContent = t('accounts.add');
+  if (_lastAccounts) renderAccountList(_lastAccounts);
+
   const threadLabel = document.getElementById('label-thread');
   if (threadLabel) threadLabel.textContent = t('thread.label');
   const threadSummaryLabel = document.getElementById('thread-summary-label');
@@ -1409,10 +1450,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (settings.demo_mode) {
       document.getElementById('demo-badge').classList.remove('hidden');
     }
-    if (settings.active_account) {
-      document.getElementById('active-account').textContent = settings.active_account;
-      document.getElementById('active-account').classList.remove('hidden');
-    }
+    _lastAccounts = settings.connected_accounts || [];
+    renderAccountList(_lastAccounts);
     startAutoSync(settings.sync_interval_minutes || 5);
   } catch (e) {
     console.error('loadSettings:', e);
@@ -1463,6 +1502,7 @@ async function loadEmails() {
     if (activeFilter.type === 'archived') params.set('archived', 'true');
     if (activeFilter.type === 'followup') params.set('needs_followup', 'true');
     if (activeFilter.type === 'snoozed') params.set('snoozed', 'true');
+    if (activeAccountFilter) params.set('account', activeAccountFilter);
     if (params.toString()) url += '?' + params.toString();
 
     allEmails = await apiFetch(url);
@@ -1472,6 +1512,92 @@ async function loadEmails() {
   } catch (e) {
     console.error('loadEmails:', e);
     showToast(t('toast.load_error', e.message), 'error');
+  }
+}
+
+// ============================================================
+// ACCOUNTS
+// ============================================================
+let activeAccountFilter = null; // null = all accounts
+
+function renderAccountList(accounts) {
+  const container = document.getElementById('account-list-sidebar');
+  const accountDiv = document.getElementById('active-account');
+  if (!container) return;
+
+  if (accounts.length === 0) {
+    container.innerHTML = '<p class="text-xs text-slate-500 px-2">Sin cuentas conectadas</p>';
+    if (accountDiv) accountDiv.classList.add('hidden');
+    return;
+  }
+
+  if (accountDiv) accountDiv.classList.remove('hidden');
+
+  let html = '';
+  if (accounts.length > 1) {
+    const allActive = activeAccountFilter === null;
+    html += `<button onclick="setAccountFilter(null)"
+      class="sidebar-link ${allActive ? 'active' : ''} w-full text-left text-xs px-2 py-1.5 rounded-lg flex items-center gap-2 text-slate-300 hover:text-white">
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></span>
+      <span class="truncate">${escHtml(t('accounts.filter_all'))}</span>
+    </button>`;
+  }
+  accounts.forEach(email => {
+    const isActive = activeAccountFilter === email;
+    html += `<div class="sidebar-link ${isActive ? 'active' : ''} w-full flex items-center gap-2 px-2 py-1.5 rounded-lg group">
+      <button onclick="setAccountFilter('${escHtml(email)}')" class="flex-1 flex items-center gap-2 text-xs text-slate-300 hover:text-white min-w-0 text-left">
+        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0"></span>
+        <span class="truncate">${escHtml(email)}</span>
+      </button>
+      <button onclick="removeAccount('${escHtml(email)}')" title="Desconectar"
+        class="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-red-400 flex-shrink-0">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function setAccountFilter(email) {
+  activeAccountFilter = email;
+  renderAccountList(_lastAccounts || []);
+  filterBy(activeFilter.type, activeFilter.value);
+}
+
+let _lastAccounts = [];
+
+async function addAccount() {
+  const btn = document.getElementById('btn-add-account');
+  const label = document.getElementById('label-add-account');
+  btn.disabled = true;
+  label.textContent = t('accounts.adding');
+  try {
+    const result = await apiFetch('/api/accounts/add', { method: 'POST' });
+    _lastAccounts = [...(_lastAccounts || []), result.email];
+    renderAccountList(_lastAccounts);
+    showToast(t('toast.account_added', result.email), 'success');
+    await Promise.all([loadStats(), loadEmails()]);
+  } catch (e) {
+    showToast(t('toast.account_add_error', e.message), 'error');
+  } finally {
+    btn.disabled = false;
+    label.textContent = t('accounts.add');
+  }
+}
+
+async function removeAccount(email) {
+  if (!confirm(t('accounts.confirm_remove', email))) return;
+  try {
+    await apiFetch(`/api/accounts/${encodeURIComponent(email)}`, { method: 'DELETE' });
+    _lastAccounts = (_lastAccounts || []).filter(a => a !== email);
+    if (activeAccountFilter === email) activeAccountFilter = null;
+    renderAccountList(_lastAccounts);
+    showToast(t('toast.account_removed', email), 'success');
+    await Promise.all([loadStats(), loadEmails()]);
+  } catch (e) {
+    showToast(t('toast.account_remove_error', e.message), 'error');
   }
 }
 

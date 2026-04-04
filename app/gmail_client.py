@@ -27,31 +27,32 @@ TOKEN_FILE = "token.json"
 
 
 class GmailClient:
-    def __init__(self):
+    def __init__(self, token_file: str = TOKEN_FILE):
         with open("config.yaml", "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
         self.max_emails = self.config["email_provider"].get("max_emails_per_sync", 20)
         self._service = None
+        self._token_file = token_file
 
     def authenticate(self) -> Credentials:
         """Run OAuth flow, refreshing or creating a token as needed."""
         creds: Optional[Credentials] = None
 
-        if os.path.exists(TOKEN_FILE):
-            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        if os.path.exists(self._token_file):
+            creds = Credentials.from_authorized_user_file(self._token_file, SCOPES)
 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                logger.info("Refreshing expired Gmail token.")
+                logger.info("Refreshing expired Gmail token for %s.", self._token_file)
                 creds.refresh(Request())
             else:
-                logger.info("Starting Gmail OAuth flow.")
+                logger.info("Starting Gmail OAuth flow (token: %s).", self._token_file)
                 flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
                 creds = flow.run_local_server(port=0)
 
-            with open(TOKEN_FILE, "w", encoding="utf-8") as token_file:
+            with open(self._token_file, "w", encoding="utf-8") as token_file:
                 token_file.write(creds.to_json())
-            logger.info("Gmail token saved to %s", TOKEN_FILE)
+            logger.info("Gmail token saved to %s", self._token_file)
 
         return creds
 

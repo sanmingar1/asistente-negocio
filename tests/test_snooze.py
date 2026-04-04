@@ -146,27 +146,25 @@ class TestStatsIncludesSnoozed:
 # ---------------------------------------------------------------------------
 
 class TestSyncWakesUpSnooze:
-    def test_sync_wakes_expired_snooze(self, client, db, email_factory, mock_gmail, mock_classifier):
+    def test_sync_wakes_expired_snooze(self, client, db, email_factory, mock_accounts, mock_classifier):
         email = email_factory()
         email.snoozed_until = datetime.datetime.utcnow() - datetime.timedelta(minutes=10)
         db.commit()
 
-        with patch.object(routes_module, "_gmail_client", mock_gmail), \
-             patch.object(routes_module, "_ai_classifier", mock_classifier):
+        with patch.object(routes_module, "_ai_classifier", mock_classifier):
             r = client.post("/api/sync")
 
         assert r.status_code == 200
         db.refresh(email)
         assert email.snoozed_until is None
 
-    def test_sync_does_not_wake_future_snooze(self, client, db, email_factory, mock_gmail, mock_classifier):
+    def test_sync_does_not_wake_future_snooze(self, client, db, email_factory, mock_accounts, mock_classifier):
         email = email_factory()
         future = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
         email.snoozed_until = future
         db.commit()
 
-        with patch.object(routes_module, "_gmail_client", mock_gmail), \
-             patch.object(routes_module, "_ai_classifier", mock_classifier):
+        with patch.object(routes_module, "_ai_classifier", mock_classifier):
             client.post("/api/sync")
 
         db.refresh(email)
