@@ -44,6 +44,7 @@ def init_db():
     _add_column_if_missing("emails", "lead_property_ref", "VARCHAR(100)")
     _add_column_if_missing("emails", "is_demo", "BOOLEAN NOT NULL DEFAULT 0")
     _add_column_if_missing("emails", "account_email", "VARCHAR(255)")
+    _add_column_if_missing("emails", "snoozed_until", "DATETIME")
 
 
 def _add_column_if_missing(table: str, column: str, definition: str) -> None:
