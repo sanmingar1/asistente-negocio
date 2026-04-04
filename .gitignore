@@ -1,0 +1,24 @@
+# Environment & secrets
+.env
+credentials.json
+token.json
+
+# Database
+data/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+
+
+# Working notes (no van al repo)
+SESSION_CONTEXT.md
+test_emails.md
+
+# Datos de clientes (nunca subir al repo)
+clients/

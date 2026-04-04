@@ -1,0 +1,55 @@
+business:
+  name: "Inmobiliaria Demo"
+  language: "es"
+
+email_provider:
+  type: gmail
+  max_emails_per_sync: 1
+  sync_interval_minutes: 20
+
+categories:
+  - name: "Oferta de compra"
+    description: "El cliente quiere hacer una oferta económica para comprar un inmueble"
+    priority: urgente
+    color: "red"
+  - name: "Solicitud de visita"
+    description: "El cliente quiere visitar una propiedad"
+    priority: alta
+    color: "orange"
+  - name: "Consulta de precio"
+    description: "El cliente pregunta por el precio de una propiedad"
+    priority: media
+    color: "yellow"
+  - name: "Documentación / trámites"
+    description: "Asuntos relacionados con contratos, notarías, hipotecas o papeleo"
+    priority: alta
+    color: "blue"
+  - name: "Consulta general"
+    description: "Preguntas generales sobre propiedades, alquiler, compra, venta o servicios inmobiliarios relacionados — el remitente es un cliente potencial o actual con una duda legítima sobre el negocio"
+    priority: media
+    color: "green"
+  - name: "Spam / irrelevante"
+    description: "Publicidad, spam, correos automáticos, o cualquier correo cuyo contenido no tenga relación directa con propiedades, alquiler, compra, venta, hipotecas o servicios inmobiliarios"
+    priority: baja
+    color: "gray"
+
+ai:
+  provider: nvidia_nim
+  model: "meta/llama-3.1-70b-instruct"
+  base_url: "https://integrate.api.nvidia.com/v1"
+
+demo:
+  enabled: true   # true → carga emails de ejemplo al arrancar | false → los elimina
+
+notifications:
+  enabled: true
+  channel: telegram
+  trigger_priorities:
+    - urgente
+
+calendar:
+  calendar_id: "primary"       # Google Calendar ID ("primary" = main calendar)
+  timezone: "Europe/Madrid"
+  business_hours_start: "08:00"
+  business_hours_end: "21:00"
+  slot_duration_minutes: 60
