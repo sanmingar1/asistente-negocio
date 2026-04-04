@@ -136,6 +136,42 @@ def get_email(email_id: int, db: Session = Depends(get_db)):
     return email.to_dict()
 
 
+# ---------------------------------------------------------------------------
+# Bulk actions — registered before {email_id} routes to avoid ambiguity
+# ---------------------------------------------------------------------------
+
+class BulkActionBody(BaseModel):
+    ids: list[int]
+
+
+@router.post("/api/emails/bulk/archive")
+def bulk_archive(data: BulkActionBody, db: Session = Depends(get_db)):
+    """Archive all emails in the given id list. Returns count of affected emails."""
+    if not data.ids:
+        raise HTTPException(status_code=400, detail="ids list cannot be empty")
+    count = (
+        db.query(Email)
+        .filter(Email.id.in_(data.ids))
+        .update({"is_archived": True}, synchronize_session=False)
+    )
+    db.commit()
+    return {"archived": count}
+
+
+@router.post("/api/emails/bulk/read")
+def bulk_mark_read(data: BulkActionBody, db: Session = Depends(get_db)):
+    """Mark all emails in the given id list as read. Returns count of affected emails."""
+    if not data.ids:
+        raise HTTPException(status_code=400, detail="ids list cannot be empty")
+    count = (
+        db.query(Email)
+        .filter(Email.id.in_(data.ids))
+        .update({"is_read": True}, synchronize_session=False)
+    )
+    db.commit()
+    return {"read": count}
+
+
 @router.post("/api/sync")
 def sync_emails(db: Session = Depends(get_db)):
     """
