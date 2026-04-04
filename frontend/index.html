@@ -151,6 +151,17 @@
             </span>
             <span class="text-xs text-slate-400" id="pf-followup-count"></span>
           </button>
+          <button onclick="filterBy('snoozed', true)" id="pf-snoozed"
+            class="sidebar-link w-full text-left text-sm px-3 py-2 rounded-lg flex items-center justify-between gap-2">
+            <span class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span id="label-filter-snoozed">En espera</span>
+            </span>
+            <span class="text-xs text-slate-400" id="pf-snoozed-count"></span>
+          </button>
           <button onclick="filterBy('archived', true)" id="pf-archived"
             class="sidebar-link w-full text-left text-sm px-3 py-2 rounded-lg flex items-center justify-between gap-2">
             <span class="flex items-center gap-2">
@@ -278,6 +289,36 @@
           <div class="flex items-start justify-between gap-4">
             <h2 class="text-xl font-semibold text-slate-800 leading-snug" id="detail-subject"></h2>
             <div class="flex items-center gap-1 flex-shrink-0">
+              <!-- Snooze button + picker -->
+              <div class="relative" id="snooze-container">
+                <button id="snooze-btn" onclick="toggleSnoozeMenu()"
+                  class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors text-violet-600 border-violet-200 hover:bg-violet-50"
+                  title="Posponer">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span id="snooze-label">Posponer</span>
+                </button>
+                <!-- Snooze dropdown -->
+                <div id="snooze-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; background:white; border:1px solid #e2e8f0; border-radius:0.5rem; box-shadow:0 4px 16px rgba(0,0,0,0.1); z-index:20; min-width:190px; overflow:hidden;">
+                  <div class="px-3 py-2 border-b border-slate-100">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide" id="snooze-menu-title">Posponer hasta…</p>
+                  </div>
+                  <div class="py-1">
+                    <button onclick="snoozeQuick(1)" class="w-full text-left text-sm px-4 py-2 text-slate-700 hover:bg-slate-50 transition-colors" id="snooze-opt-1h">1 hora</button>
+                    <button onclick="snoozeQuick(3)" class="w-full text-left text-sm px-4 py-2 text-slate-700 hover:bg-slate-50 transition-colors" id="snooze-opt-3h">3 horas</button>
+                    <button onclick="snoozeQuick('tomorrow')" class="w-full text-left text-sm px-4 py-2 text-slate-700 hover:bg-slate-50 transition-colors" id="snooze-opt-tomorrow">Mañana 9:00</button>
+                    <button onclick="snoozeQuick('week')" class="w-full text-left text-sm px-4 py-2 text-slate-700 hover:bg-slate-50 transition-colors" id="snooze-opt-week">Próxima semana</button>
+                    <div class="border-t border-slate-100 mt-1 pt-1 px-3 pb-2">
+                      <label class="text-xs text-slate-500 block mb-1" id="snooze-custom-label">Fecha y hora personalizada</label>
+                      <input type="datetime-local" id="snooze-custom-input"
+                        class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                        onchange="snoozeCustom()" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button id="archive-btn" onclick="archiveEmail()"
                 class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors"
                 title="Archivar">
@@ -937,6 +978,21 @@ const TRANSLATIONS = {
     'toast.crm_contact_deleted': 'Contacto eliminado',
     'toast.crm_edit_ok': 'Guardado',
     'toast.crm_edit_error': (msg) => `Error al guardar: ${msg}`,
+    'filter.snoozed': 'En espera',
+    'view.snoozed': 'En espera',
+    'snooze.btn': 'Posponer',
+    'snooze.unsnooze_btn': 'Quitar posponer',
+    'snooze.menu_title': 'Posponer hasta…',
+    'snooze.opt_1h': '1 hora',
+    'snooze.opt_3h': '3 horas',
+    'snooze.opt_tomorrow': 'Mañana 9:00',
+    'snooze.opt_week': 'Próxima semana',
+    'snooze.custom_label': 'Fecha y hora personalizada',
+    'snooze.badge': (label) => `⏸ Hasta ${label}`,
+    'toast.snooze_ok': (label) => `Correo pospuesto hasta ${label}`,
+    'toast.snooze_error': (msg) => `Error al posponer: ${msg}`,
+    'toast.unsnooze_ok': 'Correo restaurado a la bandeja',
+    'toast.unsnooze_error': (msg) => `Error al restaurar: ${msg}`,
   },
   en: {
     'sidebar.title': 'Smart Inbox',
@@ -1085,6 +1141,21 @@ const TRANSLATIONS = {
     'toast.crm_contact_deleted': 'Contact deleted',
     'toast.crm_edit_ok': 'Saved',
     'toast.crm_edit_error': (msg) => `Error saving: ${msg}`,
+    'filter.snoozed': 'Snoozed',
+    'view.snoozed': 'Snoozed',
+    'snooze.btn': 'Snooze',
+    'snooze.unsnooze_btn': 'Unsnooze',
+    'snooze.menu_title': 'Snooze until…',
+    'snooze.opt_1h': '1 hour',
+    'snooze.opt_3h': '3 hours',
+    'snooze.opt_tomorrow': 'Tomorrow 9:00',
+    'snooze.opt_week': 'Next week',
+    'snooze.custom_label': 'Custom date & time',
+    'snooze.badge': (label) => `⏸ Until ${label}`,
+    'toast.snooze_ok': (label) => `Email snoozed until ${label}`,
+    'toast.snooze_error': (msg) => `Snooze error: ${msg}`,
+    'toast.unsnooze_ok': 'Email restored to inbox',
+    'toast.unsnooze_error': (msg) => `Unsnooze error: ${msg}`,
   },
 };
 
@@ -1143,6 +1214,22 @@ function applyLang(save = false) {
   if (sourcesLabel) sourcesLabel.textContent = t('filter.sources');
   const followupLabel = document.getElementById('label-filter-followup');
   if (followupLabel) followupLabel.textContent = t('filter.followup');
+  const snoozedLabel = document.getElementById('label-filter-snoozed');
+  if (snoozedLabel) snoozedLabel.textContent = t('filter.snoozed');
+
+  // Snooze menu labels
+  const snoozeMenuTitle = document.getElementById('snooze-menu-title');
+  if (snoozeMenuTitle) snoozeMenuTitle.textContent = t('snooze.menu_title');
+  const snoozeOpt1h = document.getElementById('snooze-opt-1h');
+  if (snoozeOpt1h) snoozeOpt1h.textContent = t('snooze.opt_1h');
+  const snoozeOpt3h = document.getElementById('snooze-opt-3h');
+  if (snoozeOpt3h) snoozeOpt3h.textContent = t('snooze.opt_3h');
+  const snoozeOptTomorrow = document.getElementById('snooze-opt-tomorrow');
+  if (snoozeOptTomorrow) snoozeOptTomorrow.textContent = t('snooze.opt_tomorrow');
+  const snoozeOptWeek = document.getElementById('snooze-opt-week');
+  if (snoozeOptWeek) snoozeOptWeek.textContent = t('snooze.opt_week');
+  const snoozeCustomLabel = document.getElementById('snooze-custom-label');
+  if (snoozeCustomLabel) snoozeCustomLabel.textContent = t('snooze.custom_label');
   const threadLabel = document.getElementById('label-thread');
   if (threadLabel) threadLabel.textContent = t('thread.label');
   const threadSummaryLabel = document.getElementById('thread-summary-label');
@@ -1323,6 +1410,7 @@ async function loadEmails() {
     if (activeFilter.type === 'source' && activeFilter.value) params.set('source', activeFilter.value);
     if (activeFilter.type === 'archived') params.set('archived', 'true');
     if (activeFilter.type === 'followup') params.set('needs_followup', 'true');
+    if (activeFilter.type === 'snoozed') params.set('snoozed', 'true');
     if (params.toString()) url += '?' + params.toString();
 
     allEmails = await apiFetch(url);
@@ -1386,6 +1474,8 @@ function filterBy(type, value) {
   if (archivedBtn) archivedBtn.classList.toggle('active', type === 'archived');
   const followupBtn = document.getElementById('pf-followup');
   if (followupBtn) followupBtn.classList.toggle('active', type === 'followup');
+  const snoozedBtn = document.getElementById('pf-snoozed');
+  if (snoozedBtn) snoozedBtn.classList.toggle('active', type === 'snoozed');
 
   // Update category filter active states
   document.querySelectorAll('.cat-filter-btn').forEach(btn => {
@@ -1458,6 +1548,10 @@ function renderStats() {
   // Followup count
   const followupCountEl = document.getElementById('pf-followup-count');
   if (followupCountEl) followupCountEl.textContent = stats.followup || '';
+
+  // Snoozed count
+  const snoozedCountEl = document.getElementById('pf-snoozed-count');
+  if (snoozedCountEl) snoozedCountEl.textContent = stats.snoozed || '';
 
   // Source filters
   const sourceSection = document.getElementById('source-filter-section');
@@ -1589,6 +1683,7 @@ function renderEmailCard(email) {
             ${email.lead_score != null && email.lead_score > 0 ? `<span class="${scoreStyle(email.lead_score).bg} ${scoreStyle(email.lead_score).text} text-xs font-bold px-2 py-0.5 rounded-full">★ ${email.lead_score}/10</span>` : ''}
             ${email.lead_source ? `<span class="${sourceColor(email.lead_source).bg} ${sourceColor(email.lead_source).text} text-xs font-medium px-2 py-0.5 rounded-full">${escHtml(email.lead_source)}</span>` : ''}
             ${email.needs_followup ? `<span class="bg-amber-100 text-amber-700 text-xs font-semibold px-2 py-0.5 rounded-full">${escHtml(t('card.followup'))}</span>` : ''}
+            ${email.snoozed_until ? `<span class="bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">${escHtml(t('snooze.badge', formatDate(email.snoozed_until)))}</span>` : ''}
             ${repliedBadge}
           </div>
         </div>
@@ -1618,6 +1713,121 @@ async function saveManualClassification() {
     showToast(t('toast.classify_ok', category), 'success');
   } catch (e) {
     showToast(t('toast.classify_error', e.message), 'error');
+  }
+}
+
+// ============================================================
+// SNOOZE
+// ============================================================
+function toggleSnoozeMenu() {
+  const menu = document.getElementById('snooze-menu');
+  const isOpen = menu.style.display !== 'none';
+  if (isOpen) {
+    closeSnoozeMenu();
+  } else {
+    menu.style.display = 'block';
+    // Close on outside click
+    setTimeout(() => document.addEventListener('click', _closeSnoozeOnOutsideClick), 0);
+  }
+}
+
+function closeSnoozeMenu() {
+  const menu = document.getElementById('snooze-menu');
+  if (menu) menu.style.display = 'none';
+  document.removeEventListener('click', _closeSnoozeOnOutsideClick);
+}
+
+function _closeSnoozeOnOutsideClick(e) {
+  const container = document.getElementById('snooze-container');
+  if (container && !container.contains(e.target)) {
+    closeSnoozeMenu();
+  }
+}
+
+function _snoozeUntilISO(dt) {
+  // dt is a Date object — format as local ISO string without timezone shift
+  const pad = n => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}:00`;
+}
+
+async function snoozeQuick(option) {
+  closeSnoozeMenu();
+  if (!currentEmailId) return;
+
+  const now = new Date();
+  let until;
+  if (option === 'tomorrow') {
+    until = new Date(now);
+    until.setDate(until.getDate() + 1);
+    until.setHours(9, 0, 0, 0);
+  } else if (option === 'week') {
+    until = new Date(now);
+    const dayOfWeek = until.getDay(); // 0=Sun
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    until.setDate(until.getDate() + daysUntilMonday);
+    until.setHours(9, 0, 0, 0);
+  } else {
+    // numeric hours
+    until = new Date(now.getTime() + option * 60 * 60 * 1000);
+  }
+
+  await _doSnooze(until);
+}
+
+async function snoozeCustom() {
+  const input = document.getElementById('snooze-custom-input');
+  if (!input.value) return;
+  closeSnoozeMenu();
+  const until = new Date(input.value);
+  if (isNaN(until.getTime()) || until <= new Date()) {
+    showToast(t('toast.snooze_error', 'La fecha debe ser futura'), 'error');
+    return;
+  }
+  await _doSnooze(until);
+}
+
+async function _doSnooze(untilDate) {
+  try {
+    const email = await apiFetch(`/api/emails/${currentEmailId}/snooze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ until: _snoozeUntilISO(untilDate) }),
+    });
+    const label = formatDate(email.snoozed_until);
+    showDetail(email);
+    // Remove from current view if not in snoozed view
+    if (activeFilter.type !== 'snoozed') {
+      allEmails = allEmails.filter(e => e.id !== currentEmailId);
+      closeDetail();
+    } else {
+      const idx = allEmails.findIndex(e => e.id === currentEmailId);
+      if (idx !== -1) allEmails[idx] = email;
+    }
+    renderEmailList();
+    loadStats();
+    showToast(t('toast.snooze_ok', label), 'success');
+  } catch (e) {
+    showToast(t('toast.snooze_error', e.message), 'error');
+  }
+}
+
+async function unsnoozeEmail() {
+  if (!currentEmailId) return;
+  try {
+    const email = await apiFetch(`/api/emails/${currentEmailId}/unsnooze`, { method: 'POST' });
+    showDetail(email);
+    if (activeFilter.type === 'snoozed') {
+      allEmails = allEmails.filter(e => e.id !== currentEmailId);
+      closeDetail();
+    } else {
+      const idx = allEmails.findIndex(e => e.id === currentEmailId);
+      if (idx !== -1) allEmails[idx] = email;
+    }
+    renderEmailList();
+    loadStats();
+    showToast(t('toast.unsnooze_ok'), 'success');
+  } catch (e) {
+    showToast(t('toast.unsnooze_error', e.message), 'error');
   }
 }
 
@@ -1851,6 +2061,22 @@ function showDetail(email) {
     archiveBtn.className = 'flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors text-slate-500 border-slate-200 hover:bg-slate-100';
   }
 
+  // Snooze button state
+  const snoozeLabel = document.getElementById('snooze-label');
+  const snoozeBtn = document.getElementById('snooze-btn');
+  const now = new Date();
+  const isSnoozed = email.snoozed_until && new Date(email.snoozed_until) > now;
+  if (isSnoozed) {
+    snoozeLabel.textContent = t('snooze.unsnooze_btn');
+    snoozeBtn.className = 'flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors text-violet-700 border-violet-300 bg-violet-100 hover:bg-violet-200';
+    snoozeBtn.onclick = unsnoozeEmail;
+  } else {
+    snoozeLabel.textContent = t('snooze.btn');
+    snoozeBtn.className = 'flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors text-violet-600 border-violet-200 hover:bg-violet-50';
+    snoozeBtn.onclick = toggleSnoozeMenu;
+  }
+  closeSnoozeMenu();
+
   // Replied badge + reset reply area
   const repliedBadge = document.getElementById('replied-badge');
   if (email.is_replied) {
@@ -1900,6 +2126,8 @@ function updateViewTitle() {
     titleEl.textContent = t('view.archived');
   } else if (activeFilter.type === 'followup') {
     titleEl.textContent = t('view.followup');
+  } else if (activeFilter.type === 'snoozed') {
+    titleEl.textContent = t('view.snoozed');
   } else if (!activeFilter.value) {
     titleEl.textContent = t('view.all');
   } else if (activeFilter.type === 'priority') {

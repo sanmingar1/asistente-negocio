@@ -1,4 +1,5 @@
 import logging
+import datetime as dt
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -80,11 +81,29 @@ def list_emails(
     source: Optional[str] = None,
     archived: bool = False,
     needs_followup: bool = False,
+    snoozed: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Return emails newest first. Excludes archived by default; pass archived=true to list only archived."""
+    """Return emails newest first.
+    - By default excludes archived and snoozed emails.
+    - Pass archived=true to list only archived emails.
+    - Pass snoozed=true to list only currently snoozed emails.
+    """
+    now = dt.datetime.utcnow()
     query = db.query(Email).order_by(Email.received_at.desc())
-    query = query.filter(Email.is_archived == archived)
+
+    if snoozed:
+        # Only emails that are still snoozed (snoozed_until in the future)
+        query = query.filter(
+            Email.snoozed_until.isnot(None),
+            Email.snoozed_until > now,
+        )
+    else:
+        query = query.filter(Email.is_archived == archived)
+        # Exclude currently snoozed emails from the normal inbox/archive views
+        query = query.filter(
+            or_(Email.snoozed_until.is_(None), Email.snoozed_until <= now)
+        )
 
     if needs_followup:
         query = query.filter(
@@ -159,6 +178,19 @@ def sync_emails(db: Session = Depends(get_db)):
             active_account, deleted_count,
         )
         db.commit()
+
+    # Wake up any emails whose snooze period has expired
+    now = dt.datetime.utcnow()
+    woken = (
+        db.query(Email)
+        .filter(Email.snoozed_until.isnot(None), Email.snoozed_until <= now)
+        .all()
+    )
+    for e in woken:
+        e.snoozed_until = None
+    if woken:
+        db.commit()
+        logger.info("Woke up %d snoozed email(s).", len(woken))
 
     # Collect existing gmail IDs for this account to avoid duplicates
     existing_ids = {row[0] for row in db.query(Email.gmail_id).all()}
@@ -252,6 +284,7 @@ def get_stats(db: Session = Depends(get_db)):
         .all()
     )
 
+    now = dt.datetime.utcnow()
     unread_count = db.query(func.count(Email.id)).filter(Email.is_read == False, Email.is_archived == False).scalar()  # noqa: E712
     total_count = db.query(func.count(Email.id)).filter(Email.is_archived == False).scalar()
     archived_count = db.query(func.count(Email.id)).filter(Email.is_archived == True).scalar()  # noqa: E712
@@ -259,6 +292,10 @@ def get_stats(db: Session = Depends(get_db)):
         Email.priority.in_(["urgente", "alta"]),
         Email.is_replied == False,  # noqa: E712
         Email.is_archived == False,  # noqa: E712
+    ).scalar()
+    snoozed_count = db.query(func.count(Email.id)).filter(
+        Email.snoozed_until.isnot(None),
+        Email.snoozed_until > now,
     ).scalar()
 
     priority_order = {"urgente": 0, "alta": 1, "media": 2, "baja": 3}
@@ -268,6 +305,7 @@ def get_stats(db: Session = Depends(get_db)):
         "unread": unread_count,
         "archived": archived_count,
         "followup": followup_count,
+        "snoozed": snoozed_count,
         "by_category": [
             {"category": row.category, "color": row.color, "count": row.count}
             for row in by_category
@@ -316,6 +354,10 @@ class ManualClassification(BaseModel):
 
 class ReplyBody(BaseModel):
     body: str
+
+
+class SnoozeBody(BaseModel):
+    until: str  # ISO datetime string, e.g. "2024-05-10T10:00:00"
 
 
 @router.put("/api/emails/{email_id}/classify")
@@ -531,6 +573,44 @@ def reply_email(email_id: int, data: ReplyBody, db: Session = Depends(get_db)):
     email.is_replied = True
     if not email.is_read:
         email.is_read = True
+    db.commit()
+    db.refresh(email)
+    return email.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Snooze
+# ---------------------------------------------------------------------------
+
+@router.post("/api/emails/{email_id}/snooze")
+def snooze_email(email_id: int, data: SnoozeBody, db: Session = Depends(get_db)):
+    """Snooze an email until a given datetime (ISO string, UTC)."""
+    email = db.query(Email).filter(Email.id == email_id).first()
+    if not email:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    try:
+        until = dt.datetime.fromisoformat(data.until)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid datetime format. Use ISO 8601.")
+
+    if until <= dt.datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Snooze time must be in the future.")
+
+    email.snoozed_until = until
+    db.commit()
+    db.refresh(email)
+    return email.to_dict()
+
+
+@router.post("/api/emails/{email_id}/unsnooze")
+def unsnooze_email(email_id: int, db: Session = Depends(get_db)):
+    """Remove the snooze from an email, making it visible immediately."""
+    email = db.query(Email).filter(Email.id == email_id).first()
+    if not email:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    email.snoozed_until = None
     db.commit()
     db.refresh(email)
     return email.to_dict()

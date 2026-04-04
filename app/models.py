@@ -72,6 +72,7 @@ class Email(Base):
     lead_property_ref = Column(String(100), nullable=True)  # Extracted property ref
     is_demo = Column(Boolean, default=False, nullable=False)
     account_email = Column(String(255), nullable=True, index=True)  # Gmail account that owns this email
+    snoozed_until = Column(DateTime, nullable=True)  # If set, hide email until this datetime
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -101,6 +102,7 @@ class Email(Base):
             "is_demo": self.is_demo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "account_email": self.account_email,
+            "snoozed_until": self.snoozed_until.isoformat() if self.snoozed_until else None,
             "needs_followup": (
                 self.priority in ("urgente", "alta")
                 and not self.is_replied
