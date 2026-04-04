@@ -566,12 +566,21 @@
         <h2 id="crm-title" class="text-base font-semibold">Contactos CRM</h2>
         <span id="crm-contact-count" class="text-xs text-slate-400"></span>
       </div>
-      <button onclick="closeCRM()"
-        class="w-8 h-8 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
-      </button>
+      <div class="flex items-center gap-2">
+        <button onclick="openNewContactModal()"
+          class="flex items-center gap-1.5 text-xs font-medium bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded-lg transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span id="crm-btn-new">Nuevo contacto</span>
+        </button>
+        <button onclick="closeCRM()"
+          class="w-8 h-8 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Body: list + detail -->
@@ -616,18 +625,58 @@
           <!-- Contact header -->
           <div class="px-6 py-5 bg-white border-b border-slate-200 flex-shrink-0">
             <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0">
-                <h3 id="crm-detail-name" class="text-xl font-semibold text-slate-800 truncate"></h3>
-                <p id="crm-detail-email" class="text-sm text-slate-500 truncate"></p>
-                <div class="flex flex-wrap items-center gap-2 mt-1.5">
-                  <span id="crm-detail-phone" class="hidden text-sm text-slate-600 flex items-center gap-1">
+              <div class="min-w-0 flex-1">
+                <!-- Name (editable) -->
+                <div id="crm-name-view" class="flex items-center gap-2 group">
+                  <h3 id="crm-detail-name" class="text-xl font-semibold text-slate-800 truncate"></h3>
+                  <button onclick="startEditCRM('name')" class="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-indigo-500 flex-shrink-0">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                     </svg>
-                    <span id="crm-detail-phone-text"></span>
-                  </span>
-                  <span id="crm-detail-source" class="hidden text-xs px-2 py-0.5 rounded-full font-medium"></span>
+                  </button>
+                </div>
+                <div id="crm-name-edit" style="display:none;" class="flex items-center gap-1.5 mt-0.5">
+                  <input id="crm-name-input" type="text"
+                    class="text-sm border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-300 w-48"
+                    onkeydown="if(event.key==='Enter')saveCRMField('name'); if(event.key==='Escape')cancelCRMEdit('name');" />
+                  <button onclick="saveCRMField('name')" class="text-green-600 hover:text-green-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                  </button>
+                  <button onclick="cancelCRMEdit('name')" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+
+                <p id="crm-detail-email" class="text-sm text-slate-500 truncate mt-0.5"></p>
+
+                <!-- Phone (editable) -->
+                <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                  <div id="crm-phone-view" class="flex items-center gap-1.5 group">
+                    <span id="crm-detail-phone" style="display:none;" class="text-sm text-slate-600 flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                      </svg>
+                      <span id="crm-detail-phone-text"></span>
+                    </span>
+                    <button onclick="startEditCRM('phone')" class="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-indigo-500">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div id="crm-phone-edit" style="display:none;" class="flex items-center gap-1.5">
+                    <input id="crm-phone-input" type="text" placeholder="Teléfono"
+                      class="text-sm border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-300 w-36"
+                      onkeydown="if(event.key==='Enter')saveCRMField('phone'); if(event.key==='Escape')cancelCRMEdit('phone');" />
+                    <button onclick="saveCRMField('phone')" class="text-green-600 hover:text-green-500">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    </button>
+                    <button onclick="cancelCRMEdit('phone')" class="text-slate-400 hover:text-slate-600">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <span id="crm-detail-source" style="display:none;" class="text-xs px-2 py-0.5 rounded-full font-medium"></span>
                 </div>
               </div>
               <div class="text-right flex-shrink-0">
@@ -668,7 +717,7 @@
                   class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300"></textarea>
                 <button onclick="addCRMNote()"
                   class="px-3 py-2 bg-indigo-500 hover:bg-indigo-400 text-white text-sm rounded-lg transition-colors self-start mt-0.5">
-                  Añadir
+                  <span id="crm-note-add-label">Añadir</span>
                 </button>
               </div>
               <div id="crm-notes-list" class="space-y-2"></div>
@@ -679,6 +728,44 @@
       </div><!-- end detail pane -->
     </div><!-- end body -->
   </div><!-- end panel -->
+
+  <!-- New contact modal -->
+  <div id="crm-new-modal" style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.4); z-index:10; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:0.75rem; padding:1.5rem; width:22rem; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+      <h3 id="crm-modal-title" class="text-base font-semibold text-slate-800 mb-4">Nuevo contacto</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-medium text-slate-500 uppercase tracking-wider">Email *</label>
+          <input id="crm-new-email" type="email" placeholder="lead@ejemplo.com"
+            class="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            onkeydown="if(event.key==='Enter')createCRMContact();" />
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 uppercase tracking-wider" id="crm-modal-name-label">Nombre</label>
+          <input id="crm-new-name" type="text" placeholder="María García"
+            class="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            onkeydown="if(event.key==='Enter')createCRMContact();" />
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 uppercase tracking-wider" id="crm-modal-phone-label">Teléfono</label>
+          <input id="crm-new-phone" type="text" placeholder="600 123 456"
+            class="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            onkeydown="if(event.key==='Enter')createCRMContact();" />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button onclick="createCRMContact()" id="crm-modal-save"
+          class="flex-1 bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+          Guardar
+        </button>
+        <button onclick="closeNewContactModal()"
+          class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium py-2 rounded-lg transition-colors">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div><!-- end crm-overlay -->
 
 
@@ -830,6 +917,16 @@ const TRANSLATIONS = {
     'toast.crm_note_error': (msg) => `Error al añadir nota: ${msg}`,
     'toast.crm_note_deleted': 'Nota eliminada',
     'toast.crm_load_error': (msg) => `Error al cargar contactos: ${msg}`,
+    'crm.btn_new': 'Nuevo contacto',
+    'crm.modal_title': 'Nuevo contacto',
+    'crm.modal_name': 'Nombre',
+    'crm.modal_phone': 'Teléfono',
+    'crm.modal_save': 'Guardar',
+    'toast.crm_contact_created': 'Contacto creado',
+    'toast.crm_contact_exists': 'Ya existe un contacto con ese email',
+    'toast.crm_contact_error': (msg) => `Error al crear contacto: ${msg}`,
+    'toast.crm_edit_ok': 'Guardado',
+    'toast.crm_edit_error': (msg) => `Error al guardar: ${msg}`,
   },
   en: {
     'sidebar.title': 'Smart Inbox',
@@ -966,6 +1063,16 @@ const TRANSLATIONS = {
     'toast.crm_note_error': (msg) => `Error adding note: ${msg}`,
     'toast.crm_note_deleted': 'Note deleted',
     'toast.crm_load_error': (msg) => `Error loading contacts: ${msg}`,
+    'crm.btn_new': 'New contact',
+    'crm.modal_title': 'New contact',
+    'crm.modal_name': 'Name',
+    'crm.modal_phone': 'Phone',
+    'crm.modal_save': 'Save',
+    'toast.crm_contact_created': 'Contact created',
+    'toast.crm_contact_exists': 'A contact with that email already exists',
+    'toast.crm_contact_error': (msg) => `Error creating contact: ${msg}`,
+    'toast.crm_edit_ok': 'Saved',
+    'toast.crm_edit_error': (msg) => `Error saving: ${msg}`,
   },
 };
 
@@ -1051,6 +1158,18 @@ function applyLang(save = false) {
   // CRM
   const crmBtn = document.getElementById('label-crm-btn');
   if (crmBtn) crmBtn.textContent = t('crm.btn');
+  const crmBtnNew = document.getElementById('crm-btn-new');
+  if (crmBtnNew) crmBtnNew.textContent = t('crm.btn_new');
+  const crmNoteAdd = document.getElementById('crm-note-add-label');
+  if (crmNoteAdd) crmNoteAdd.textContent = t('crm.note_add');
+  const crmModalTitle = document.getElementById('crm-modal-title');
+  if (crmModalTitle) crmModalTitle.textContent = t('crm.modal_title');
+  const crmModalName = document.getElementById('crm-modal-name-label');
+  if (crmModalName) crmModalName.textContent = t('crm.modal_name');
+  const crmModalPhone = document.getElementById('crm-modal-phone-label');
+  if (crmModalPhone) crmModalPhone.textContent = t('crm.modal_phone');
+  const crmModalSave = document.getElementById('crm-modal-save');
+  if (crmModalSave) crmModalSave.textContent = t('crm.modal_save');
 
   // Priority select options
   document.getElementById('opt-urgente').textContent = t('priority.urgente');
@@ -2098,15 +2217,123 @@ const STAGE_COLORS_ACTIVE = {
 };
 
 function openCRM() {
-  document.getElementById('crm-overlay').style.display = 'block';
+  const overlay = document.getElementById('crm-overlay');
+  overlay.style.opacity = '0';
+  overlay.style.transition = 'opacity 0.18s ease';
+  overlay.style.display = 'block';
+  requestAnimationFrame(() => { overlay.style.opacity = '1'; });
   loadCRMContacts();
 }
 
 function closeCRM() {
-  document.getElementById('crm-overlay').style.display = 'none';
-  document.getElementById('crm-detail-empty').style.display = '';
-  document.getElementById('crm-detail-content').style.display = 'none';
-  currentCRMEmail = null;
+  const overlay = document.getElementById('crm-overlay');
+  overlay.style.transition = 'opacity 0.18s ease';
+  overlay.style.opacity = '0';
+  setTimeout(() => {
+    overlay.style.display = 'none';
+    document.getElementById('crm-detail-empty').style.display = '';
+    document.getElementById('crm-detail-content').style.display = 'none';
+    currentCRMEmail = null;
+  }, 180);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('crm-overlay');
+    if (overlay && overlay.style.display !== 'none') closeCRM();
+    const modal = document.getElementById('crm-new-modal');
+    if (modal && modal.style.display !== 'none') closeNewContactModal();
+  }
+});
+
+// ---- Inline edit (name / phone) ----
+
+function startEditCRM(field) {
+  const nameMap = { name: 'crm-detail-name', phone: 'crm-detail-phone-text' };
+  const viewMap = { name: 'crm-name-view', phone: 'crm-phone-view' };
+  const editMap = { name: 'crm-name-edit', phone: 'crm-phone-edit' };
+  const inputMap = { name: 'crm-name-input', phone: 'crm-phone-input' };
+
+  document.getElementById(viewMap[field]).style.display = 'none';
+  document.getElementById(editMap[field]).style.display = 'flex';
+  const input = document.getElementById(inputMap[field]);
+  input.value = document.getElementById(nameMap[field]).textContent;
+  input.focus();
+  input.select();
+}
+
+function cancelCRMEdit(field) {
+  const viewMap = { name: 'crm-name-view', phone: 'crm-phone-view' };
+  const editMap = { name: 'crm-name-edit', phone: 'crm-phone-edit' };
+  const vEl = document.getElementById(viewMap[field]);
+  const eEl = document.getElementById(editMap[field]);
+  if (vEl) vEl.style.display = '';
+  if (eEl) eEl.style.display = 'none';
+}
+
+async function saveCRMField(field) {
+  const inputMap = { name: 'crm-name-input', phone: 'crm-phone-input' };
+  const displayMap = { name: 'crm-detail-name', phone: 'crm-detail-phone-text' };
+  const value = document.getElementById(inputMap[field]).value.trim();
+  try {
+    const body = {};
+    body[field] = value;
+    await apiFetch('/api/contacts/' + encodeURIComponent(currentCRMEmail), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    document.getElementById(displayMap[field]).textContent = value;
+    // Update phone visibility
+    if (field === 'phone') {
+      document.getElementById('crm-detail-phone').style.display = value ? 'flex' : 'none';
+    }
+    // Update list cache
+    const c = crmContacts.find(x => x.email === currentCRMEmail);
+    if (c) c[field] = value || null;
+    cancelCRMEdit(field);
+    showToast(t('toast.crm_edit_ok'), 'success');
+  } catch (e) {
+    showToast(t('toast.crm_edit_error', e.message), 'error');
+  }
+}
+
+// ---- New contact modal ----
+
+function openNewContactModal() {
+  const modal = document.getElementById('crm-new-modal');
+  modal.style.display = 'flex';
+  document.getElementById('crm-new-email').value = '';
+  document.getElementById('crm-new-name').value = '';
+  document.getElementById('crm-new-phone').value = '';
+  document.getElementById('crm-new-email').focus();
+}
+
+function closeNewContactModal() {
+  document.getElementById('crm-new-modal').style.display = 'none';
+}
+
+async function createCRMContact() {
+  const email = document.getElementById('crm-new-email').value.trim();
+  const name = document.getElementById('crm-new-name').value.trim();
+  const phone = document.getElementById('crm-new-phone').value.trim();
+  if (!email) { document.getElementById('crm-new-email').focus(); return; }
+  try {
+    await apiFetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name: name || null, phone: phone || null }),
+    });
+    closeNewContactModal();
+    await loadCRMContacts();
+    showToast(t('toast.crm_contact_created'), 'success');
+    openCRMContact(email);
+  } catch (e) {
+    const msg = e.message.includes('409') || e.message.toLowerCase().includes('already')
+      ? t('toast.crm_contact_exists')
+      : t('toast.crm_contact_error', e.message);
+    showToast(msg, 'error');
+  }
 }
 
 async function loadCRMContacts() {
@@ -2195,22 +2422,28 @@ function renderCRMDetail(data) {
   document.getElementById('crm-detail-email-count').textContent = data.emails.length;
   document.getElementById('crm-detail-email-count-label').textContent = t('crm.emails_label');
 
+  // Reset any open inline edits
+  cancelCRMEdit('name');
+  cancelCRMEdit('phone');
+
+  // Phone
   const phoneEl = document.getElementById('crm-detail-phone');
   if (data.phone) {
     document.getElementById('crm-detail-phone-text').textContent = data.phone;
-    phoneEl.classList.remove('hidden');
+    phoneEl.style.display = 'flex';
   } else {
-    phoneEl.classList.add('hidden');
+    phoneEl.style.display = 'none';
   }
 
+  // Source badge
   const sourceEl = document.getElementById('crm-detail-source');
   if (data.lead_source) {
     sourceEl.textContent = data.lead_source;
     const sc = sourceColor(data.lead_source);
     sourceEl.className = `text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`;
-    sourceEl.classList.remove('hidden');
+    sourceEl.style.display = 'inline-block';
   } else {
-    sourceEl.classList.add('hidden');
+    sourceEl.style.display = 'none';
   }
 
   renderCRMPipeline(data.pipeline_stage || 'lead');
