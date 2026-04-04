@@ -1,5 +1,8 @@
 """
 Tests for the CRM contacts feature:
+- POST /api/contacts          (create)
+- PATCH /api/contacts/{email} (update name/phone)
+- DELETE /api/contacts/{email} (delete contact)
 - GET /api/contacts
 - GET /api/contacts/{email}
 - PUT /api/contacts/{email}/stage
@@ -228,6 +231,97 @@ class TestDeleteNote:
         make_contact(db, email="mia@example.com")
         r = client.delete("/api/contacts/mia%40example.com/notes/99999")
         assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/contacts/{email} — delete contact
+# ---------------------------------------------------------------------------
+
+class TestDeleteContact:
+    def test_delete_contact(self, client, db):
+        make_contact(db, email="del@example.com")
+        r = client.delete("/api/contacts/del%40example.com")
+        assert r.status_code == 200
+        assert r.json()["deleted"] == "del@example.com"
+        # Verify gone
+        r2 = client.get("/api/contacts/del%40example.com")
+        assert r2.status_code == 404
+
+    def test_delete_also_removes_notes(self, client, db):
+        make_contact(db, email="dnotes@example.com")
+        note = ContactNote(contact_email="dnotes@example.com", body="Nota")
+        db.add(note); db.commit(); db.refresh(note)
+        client.delete("/api/contacts/dnotes%40example.com")
+        assert db.query(ContactNote).filter(ContactNote.contact_email == "dnotes@example.com").count() == 0
+
+    def test_delete_nonexistent_returns_404(self, client):
+        r = client.delete("/api/contacts/noexiste%40example.com")
+        assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /api/contacts — create manually
+# ---------------------------------------------------------------------------
+
+class TestCreateContact:
+    def test_create_contact(self, client):
+        r = client.post("/api/contacts", json={"email": "nuevo@example.com", "name": "Nuevo"})
+        assert r.status_code == 200
+        assert r.json()["email"] == "nuevo@example.com"
+        assert r.json()["pipeline_stage"] == "lead"
+
+    def test_create_with_name_and_phone(self, client):
+        r = client.post("/api/contacts", json={"email": "full@example.com", "name": "Ana", "phone": "600111222"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "Ana"
+        assert r.json()["phone"] == "600111222"
+
+    def test_create_invalid_email_returns_400(self, client):
+        r = client.post("/api/contacts", json={"email": "noesunemail"})
+        assert r.status_code == 400
+
+    def test_create_empty_email_returns_400(self, client):
+        r = client.post("/api/contacts", json={"email": ""})
+        assert r.status_code == 400
+
+    def test_create_duplicate_returns_409(self, client, db):
+        make_contact(db, email="dup@example.com")
+        r = client.post("/api/contacts", json={"email": "dup@example.com"})
+        assert r.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/contacts/{email} — update name / phone
+# ---------------------------------------------------------------------------
+
+class TestUpdateContact:
+    def test_update_name(self, client, db):
+        make_contact(db, email="upd@example.com", name="Old Name")
+        r = client.patch("/api/contacts/upd%40example.com", json={"name": "New Name"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "New Name"
+
+    def test_update_phone(self, client, db):
+        make_contact(db, email="phone@example.com", phone=None)
+        r = client.patch("/api/contacts/phone%40example.com", json={"phone": "611222333"})
+        assert r.status_code == 200
+        assert r.json()["phone"] == "611222333"
+
+    def test_update_clears_field_with_empty_string(self, client, db):
+        make_contact(db, email="clear@example.com", name="Has Name")
+        r = client.patch("/api/contacts/clear%40example.com", json={"name": ""})
+        assert r.status_code == 200
+        assert r.json()["name"] is None
+
+    def test_update_unknown_contact_returns_404(self, client):
+        r = client.patch("/api/contacts/nobody%40example.com", json={"name": "X"})
+        assert r.status_code == 404
+
+    def test_partial_update_keeps_other_fields(self, client, db):
+        make_contact(db, email="partial@example.com", name="Keep", phone="999")
+        r = client.patch("/api/contacts/partial%40example.com", json={"name": "Changed"})
+        assert r.status_code == 200
+        assert r.json()["phone"] == "999"  # unchanged
 
 
 # ---------------------------------------------------------------------------

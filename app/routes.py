@@ -291,6 +291,17 @@ class StageBody(BaseModel):
     stage: str
 
 
+class ContactCreate(BaseModel):
+    email: str
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class ContactUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
 class ScheduleBody(BaseModel):
     start: str        # ISO datetime string, e.g. "2024-05-10T10:00:00"
     end: str
@@ -529,6 +540,40 @@ def reply_email(email_id: int, data: ReplyBody, db: Session = Depends(get_db)):
 # CRM — Contacts
 # ---------------------------------------------------------------------------
 
+@router.post("/api/contacts")
+def create_contact(data: ContactCreate, db: Session = Depends(get_db)):
+    """Manually create a contact."""
+    email = (data.email or "").strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email required")
+    if db.query(Contact).filter(Contact.email == email).first():
+        raise HTTPException(status_code=409, detail="Contact already exists")
+    contact = Contact(
+        email=email,
+        name=(data.name or "").strip() or None,
+        phone=(data.phone or "").strip() or None,
+    )
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact.to_dict()
+
+
+@router.patch("/api/contacts/{contact_email:path}")
+def update_contact(contact_email: str, data: ContactUpdate, db: Session = Depends(get_db)):
+    """Update name and/or phone of a contact."""
+    contact = db.query(Contact).filter(Contact.email == contact_email).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    if data.name is not None:
+        contact.name = data.name.strip() or None
+    if data.phone is not None:
+        contact.phone = data.phone.strip() or None
+    db.commit()
+    db.refresh(contact)
+    return contact.to_dict()
+
+
 @router.get("/api/contacts")
 def list_contacts(db: Session = Depends(get_db)):
     """Return all contacts with their email count and last contact date."""
@@ -621,6 +666,18 @@ def delete_contact_note(contact_email: str, note_id: int, db: Session = Depends(
     db.delete(note)
     db.commit()
     return {"deleted": note_id}
+
+
+@router.delete("/api/contacts/{contact_email:path}")
+def delete_contact(contact_email: str, db: Session = Depends(get_db)):
+    """Delete a contact and all their notes."""
+    contact = db.query(Contact).filter(Contact.email == contact_email).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    db.query(ContactNote).filter(ContactNote.contact_email == contact_email).delete()
+    db.delete(contact)
+    db.commit()
+    return {"deleted": contact_email}
 
 
 @router.get("/api/settings")
