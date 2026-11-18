@@ -3,6 +3,7 @@ Shared fixtures for all tests.
 Uses an in-memory SQLite DB and a minimal FastAPI app (no lifespan / demo data).
 External APIs (Gmail, Calendar, NVIDIA NIM) are always mocked.
 """
+import os
 import uuid
 import pytest
 from unittest.mock import MagicMock, patch
@@ -12,6 +13,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# The LLM client is created at import time; tests never call it, but it needs a key.
+os.environ.setdefault("NVIDIA_API_KEY", "test-key")
 
 from app.database import Base, get_db
 from app.routes import router
